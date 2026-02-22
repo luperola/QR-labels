@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node generate-labels.js"
+    "start": "node generate-labels.js",
+    "start:labels": "node generate-labels.js",
+    "start:inventory": "node inventory-server.js"
   },
   "dependencies": {
     "csv-parse": "^6.1.0",

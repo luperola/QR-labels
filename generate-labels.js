@@ -155,11 +155,11 @@ async function main() {
       const y = MARGIN + row * (labelH + GAP_Y);
 
       // bordo guida (puoi toglierlo se non lo vuoi)
-      doc
+      /* doc
         .lineWidth(0.5)
         .rect(x, y, labelW, labelH)
         .strokeColor("#CCCCCC")
-        .stroke();
+        .stroke(); */
 
       // QR
       const qrX = x + PAD;

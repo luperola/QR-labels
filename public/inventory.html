@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>QR Inventory</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 16px;
+        max-width: 760px;
+      }
+      input,
+      select,
+      button,
+      textarea {
+        font-size: 16px;
+        padding: 8px;
+        margin: 4px 0;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-top: 12px;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 6px;
+        font-size: 14px;
+      }
+      .ok {
+        color: #0a7a2f;
+      }
+      .err {
+        color: #b00020;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Movimenti magazzino (test)</h1>
+    <p>
+      Lo stock è salvato sul PC/server nel file
+      <code>data/movements.json</code>, non sul telefono.
+    </p>
+
+    <label>Payload QR (es: <code>sku=ABC;lot=L1</code>)</label>
+    <input id="payload" placeholder="sku=ABC;lot=L1" />
+    <button id="parseBtn">Leggi QR</button>
+
+    <div class="row">
+      <div>
+        <label>SKU</label>
+        <input id="sku" />
+      </div>
+      <div>
+        <label>LOT</label>
+        <input id="lot" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Tipo</label>
+        <select id="type">
+          <option value="IN">IN (entrata)</option>
+          <option value="OUT">OUT (uscita)</option>
+        </select>
+      </div>
+      <div>
+        <label>Quantità</label>
+        <input id="qty" type="number" min="1" value="1" />
+      </div>
+    </div>
+
+    <label>Operatore</label>
+    <input id="operator" placeholder="es. Luca" />
+    <label>Note</label>
+    <textarea id="note" rows="2"></textarea>
+
+    <button id="saveBtn">Salva movimento</button>
+    <p id="msg"></p>
+
+    <h2>Stock attuale</h2>
+    <table id="stockTable">
+      <thead>
+        <tr>
+          <th>SKU</th>
+          <th>LOT</th>
+          <th>Stock</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      async function refreshStock() {
+        const res = await fetch("/api/stock");
+        const data = await res.json();
+        const tbody = $("stockTable").querySelector("tbody");
+        tbody.innerHTML = "";
+        data.stock.forEach((s) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${s.sku}</td><td>${s.lot || "-"}</td><td>${s.stock}</td>`;
+          tbody.appendChild(tr);
+        });
+      }
+
+      $("parseBtn").onclick = async () => {
+        const payload = $("payload").value;
+        const res = await fetch(
+          `/api/scan?payload=${encodeURIComponent(payload)}`,
+        );
+        const data = await res.json();
+        $("sku").value = data.sku || "";
+        $("lot").value = data.lot || "";
+      };
+
+      $("saveBtn").onclick = async () => {
+        const body = {
+          sku: $("sku").value,
+          lot: $("lot").value,
+          type: $("type").value,
+          qty: Number($("qty").value),
+          operator: $("operator").value,
+          note: $("note").value,
+        };
+
+        const res = await fetch("/api/movement", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        const data = await res.json();
+        $("msg").className = res.ok ? "ok" : "err";
+        $("msg").textContent = res.ok
+          ? `Movimento salvato. Stock attuale: ${data.stock}`
+          : data.error;
+        if (res.ok) refreshStock();
+      };
+
+      refreshStock();
+    </script>
+  </body>
+</html>
