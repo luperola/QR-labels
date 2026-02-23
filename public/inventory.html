@@ -130,6 +130,7 @@
       const $ = (id) => document.getElementById(id);
       let qrControls = null;
       let scanLocked = false;
+      let lastScanErrorAt = 0;
 
       function canUseLiveScanner() {
         return (
@@ -230,7 +231,7 @@
 
       $("startScanBtn").addEventListener("click", async () => {
         try {
-          if (!(window.ZXing && window.ZXing.BrowserQRCodeReader))
+          if (!(window.ZXing && window.ZXing.BrowserMultiFormatReader))
             throw new Error("Libreria QR non caricata.");
 
           if (!canUseLiveScanner()) {
@@ -243,23 +244,50 @@
           }
 
           stopScanner();
+          lastScanErrorAt = 0;
           $("qrVideoWrap").hidden = false;
           setMessage("Attivo la fotocamera...", "info");
 
-          const reader = new ZXing.BrowserQRCodeReader();
-          qrControls = await reader.decodeFromVideoDevice(
-            undefined,
-            $("qrVideo"),
-            async (result) => {
-              if (!result || !result.text || scanLocked) return;
-              scanLocked = true;
-              stopScanner();
+          const hints = new Map();
+          hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+          hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+            ZXing.BarcodeFormat.QR_CODE,
+          ]);
 
-              try {
-                await handleScanText(result.text);
-                setMessage("QR letto in tempo reale.", "ok");
-              } catch (e) {
-                setMessage(e.message || "Errore lettura QR.", "err");
+          const reader = new ZXing.BrowserMultiFormatReader(hints);
+          qrControls = await reader.decodeFromConstraints(
+            {
+              audio: false,
+              video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+              },
+            },
+            async (result, err) => {
+              if (result && result.text && !scanLocked) {
+                scanLocked = true;
+                stopScanner();
+
+                try {
+                  await handleScanText(result.text);
+                  setMessage("QR letto in tempo reale.", "ok");
+                } catch (e) {
+                  setMessage(e.message || "Errore lettura QR.", "err");
+                }
+                return;
+              }
+
+              if (
+                err &&
+                !(err instanceof ZXing.NotFoundException) &&
+                Date.now() - lastScanErrorAt > 2000
+              ) {
+                lastScanErrorAt = Date.now();
+                setMessage(
+                  `Scanner attivo ma con difficoltà di lettura (${err.message || "errore fotocamera"}). Prova ad avvicinare/allontanare il QR e aumentare la luce.`,
+                  "info",
+                );
               }
             },
           );
