@@ -5,18 +5,17 @@ import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import ExcelJS from "exceljs";
 
-const INPUT_XLSX = path.resolve("./data.xlsx"); // <-- qui carica SEMPRE questo file
+const INPUT_XLSX = path.resolve("./data.xlsx");
 const OUT_DIR = path.resolve("./output");
 const OUT_PDF = path.join(OUT_DIR, "labels.pdf");
+const QR_BASE_URL = (process.env.QR_BASE_URL || "").trim();
 
-// === Layout etichette (A4) ===
-// 3 colonne x 8 righe = 24 etichette per pagina
-const PAGE = { width: 595.28, height: 841.89 }; // A4 in punti (pt)
-const MARGIN = 24; // ~8.5 mm
+const PAGE = { width: 595.28, height: 841.89 };
+const MARGIN = 24;
 const COLS = 3;
 const ROWS = 8;
-const GAP_X = 10; // spazio orizzontale tra etichette
-const GAP_Y = 10; // spazio verticale tra etichette
+const GAP_X = 10;
+const GAP_Y = 10;
 
 const usableW = PAGE.width - MARGIN * 2;
 const usableH = PAGE.height - MARGIN * 2;
@@ -24,9 +23,8 @@ const usableH = PAGE.height - MARGIN * 2;
 const labelW = (usableW - GAP_X * (COLS - 1)) / COLS;
 const labelH = (usableH - GAP_Y * (ROWS - 1)) / ROWS;
 
-// contenuti dentro etichetta
 const PAD = 8;
-const QR_SIZE = Math.min(labelW, labelH) * 0.55; // dimensione QR (55% del lato minore)
+const QR_SIZE = Math.min(labelW, labelH) * 0.55;
 const TEXT_LINE_H = 12;
 
 function ensureOutDir() {
@@ -34,10 +32,8 @@ function ensureOutDir() {
 }
 
 function clean(v) {
-  // ExcelJS può restituire: string, number, { richText }, ecc.
   if (v == null) return "";
   if (typeof v === "object") {
-    // prova a gestire casi comuni (es. {text: "..."} o richText)
     if (typeof v.text === "string") return v.text.trim();
     if (Array.isArray(v.richText)) {
       return v.richText
@@ -53,13 +49,22 @@ function qrPayload({ sku, lot, ser }) {
   const parts = [];
   if (sku) parts.push(`sku=${sku}`);
   if (lot) parts.push(`lot=${lot}`);
-  if (ser) parts.push(`ser=${ser}`); // non usato ora, ma pronto
-  return parts.join(";");
+  if (ser) parts.push(`ser=${ser}`);
+  const rawPayload = parts.join(";");
+
+  if (!QR_BASE_URL) return rawPayload;
+
+  const url = new URL(QR_BASE_URL);
+  if (sku) url.searchParams.set("sku", sku);
+  if (lot) url.searchParams.set("lot", lot);
+  if (ser) url.searchParams.set("ser", ser);
+  if (rawPayload) url.searchParams.set("payload", rawPayload);
+  return url.toString();
 }
 
 async function makeQrPngBuffer(text) {
   return QRCode.toBuffer(text, {
-    errorCorrectionLevel: "M", // buon compromesso per etichette reali
+    errorCorrectionLevel: "M",
     margin: 1,
     type: "png",
     scale: 8,
@@ -70,7 +75,7 @@ async function readXlsxRows(filePath) {
   if (!fs.existsSync(filePath)) {
     throw new Error(
       `File Excel non trovato: ${filePath}\n` +
-        `Metti "data.xlsx" nella cartella del progetto (accanto a generate-labels.js).`,
+        'Metti "data.xlsx" nella cartella del progetto (accanto a generate-labels.js).',
     );
   }
 
@@ -80,9 +85,8 @@ async function readXlsxRows(filePath) {
   const ws = wb.worksheets[0];
   if (!ws) throw new Error("Nessun foglio trovato nel file Excel.");
 
-  // Intestazioni dalla prima riga
   const headerRow = ws.getRow(1);
-  const headerMap = {}; // { sku: 1, lot: 2, desc: 3, ... }
+  const headerMap = {};
 
   headerRow.eachCell((cell, colNumber) => {
     const key = clean(cell.value).toLowerCase();
@@ -97,16 +101,16 @@ async function readXlsxRows(filePath) {
   }
 
   const colSku = headerMap.sku;
-  const colLot = headerMap.lot; // può essere undefined
-  const colDesc = headerMap.desc; // può essere undefined
+  const colLot = headerMap.lot;
+  const colDesc = headerMap.desc;
 
   const rows = [];
 
   ws.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return; // salta intestazioni
+    if (rowNumber === 1) return;
 
     const sku = clean(row.getCell(colSku).value);
-    if (!sku) return; // riga vuota
+    if (!sku) return;
 
     const lot = colLot ? clean(row.getCell(colLot).value) : "";
     const desc = colDesc ? clean(row.getCell(colDesc).value) : "";
@@ -154,19 +158,10 @@ async function main() {
       const x = MARGIN + col * (labelW + GAP_X);
       const y = MARGIN + row * (labelH + GAP_Y);
 
-      // bordo guida (puoi toglierlo se non lo vuoi)
-      /* doc
-        .lineWidth(0.5)
-        .rect(x, y, labelW, labelH)
-        .strokeColor("#CCCCCC")
-        .stroke(); */
-
-      // QR
       const qrX = x + PAD;
       const qrY = y + PAD;
       doc.image(qrBuf, qrX, qrY, { width: QR_SIZE, height: QR_SIZE });
 
-      // Testo
       const textX = x + PAD;
       const textY = qrY + QR_SIZE + 6;
 
@@ -203,6 +198,11 @@ async function main() {
   console.log(`✅ Letto Excel: ${INPUT_XLSX}`);
   console.log(`✅ Creato PDF : ${OUT_PDF}`);
   console.log(`✅ Etichette : ${rows.length}`);
+  if (QR_BASE_URL) {
+    console.log(`✅ QR in formato URL base: ${QR_BASE_URL}`);
+  } else {
+    console.log("ℹ️ QR in formato payload raw (sku=...;lot=...).");
+  }
 }
 
 main().catch((err) => {

@@ -43,7 +43,7 @@ function writeMovements(movements) {
   );
 }
 
-function parseQrPayload(payload = "") {
+function parseKvPayload(payload = "") {
   return payload
     .split(";")
     .map((part) => part.trim())
@@ -53,6 +53,30 @@ function parseQrPayload(payload = "") {
       if (key && value) acc[key.trim()] = value.trim();
       return acc;
     }, {});
+}
+
+function parseQrPayload(input = "") {
+  const payload = input.trim();
+  if (!payload) return {};
+
+  // formato classico: sku=ABC;lot=L1
+  if (!payload.startsWith("http://") && !payload.startsWith("https://")) {
+    return parseKvPayload(payload);
+  }
+
+  // formato URL: http://ip:3000/?sku=ABC&lot=L1&payload=sku%3DABC%3Blot%3DL1
+  try {
+    const url = new URL(payload);
+    const fromPayload = parseKvPayload(url.searchParams.get("payload") || "");
+
+    return {
+      sku: url.searchParams.get("sku") || fromPayload.sku || "",
+      lot: url.searchParams.get("lot") || fromPayload.lot || "",
+      ser: url.searchParams.get("ser") || fromPayload.ser || "",
+    };
+  } catch {
+    return parseKvPayload(payload);
+  }
 }
 
 function stockFromMovements(movements) {
@@ -186,5 +210,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Inventory server in ascolto su http://localhost:${PORT}`);
+  console.log(`In rete locale usa: http://IP_DEL_PC:${PORT}`);
   console.log(`Movimenti salvati in ${MOVEMENTS_FILE}`);
 });
