@@ -1,1 +1,32 @@
-[]
+[
+  {
+    "id": "1771854828401-btw9bs",
+    "timestamp": "2026-02-23T13:53:48.401Z",
+    "sku": "SM-004812",
+    "lot": "L2602A",
+    "type": "IN",
+    "qty": 10,
+    "operator": "Luigi",
+    "note": ""
+  },
+  {
+    "id": "1771854828411-smb1xt",
+    "timestamp": "2026-02-23T13:53:48.411Z",
+    "sku": "SM-004812",
+    "lot": "L2602A",
+    "type": "IN",
+    "qty": 10,
+    "operator": "Luigi",
+    "note": ""
+  },
+  {
+    "id": "1771854828413-qjl0ty",
+    "timestamp": "2026-02-23T13:53:48.413Z",
+    "sku": "SM-004812",
+    "lot": "L2602A",
+    "type": "IN",
+    "qty": 10,
+    "operator": "Luigi",
+    "note": ""
+  }
+]

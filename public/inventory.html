@@ -141,7 +141,7 @@
           if (sku || lot) {
             return `sku=${sku};lot=${lot}`;
           }
-        } catch {
+        } catch (e) {
           // Non è un URL: uso testo puro.
         }
         return text;
@@ -158,7 +158,7 @@
             tr.innerHTML = `<td>${r.sku}</td><td>${r.lot || "-"}</td><td>${r.stock}</td>`;
             tbody.appendChild(tr);
           });
-        } catch {
+        } catch (e) {
           setMessage("Errore caricamento stock.", "err");
         }
       }
@@ -184,7 +184,7 @@
 
       $("startScanBtn").addEventListener("click", async () => {
         try {
-          if (!window.ZXing?.BrowserQRCodeReader)
+          if (!(window.ZXing && window.ZXing.BrowserQRCodeReader))
             throw new Error("Libreria QR non caricata.");
 
           stopScanner();
@@ -196,7 +196,7 @@
             undefined,
             $("qrVideo"),
             async (result) => {
-              if (!result?.text || scanLocked) return;
+              if (!result || !result.text || scanLocked) return;
               scanLocked = true;
               stopScanner();
 
