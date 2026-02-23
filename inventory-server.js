@@ -20,8 +20,19 @@ function ensureDataFile() {
 
 function readMovements() {
   ensureDataFile();
-  const raw = fs.readFileSync(MOVEMENTS_FILE, "utf-8");
-  return JSON.parse(raw);
+  const raw = fs.readFileSync(MOVEMENTS_FILE, "utf-8").trim();
+
+  if (!raw) {
+    writeMovements([]);
+    return [];
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    writeMovements([]);
+    return [];
+  }
 }
 
 function writeMovements(movements) {
