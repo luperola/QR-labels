@@ -42,6 +42,34 @@
       .err {
         color: #b00020;
       }
+      .scannerModal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 16px;
+        z-index: 1000;
+      }
+      .scannerVideo {
+        width: min(480px, 100%);
+        border-radius: 8px;
+        background: #000;
+      }
+      .scannerActions {
+        width: min(480px, 100%);
+        margin-top: 10px;
+        display: flex;
+        gap: 8px;
+      }
+      .scannerActions button {
+        margin: 0;
+      }
+      .info {
+        color: #0a5ea8;
+      }
     </style>
   </head>
   <body>
@@ -115,14 +143,110 @@
         });
       }
 
-      $("parseBtn").onclick = async () => {
-        const payload = $("payload").value;
+      async function parsePayload(payload) {
         const res = await fetch(
           `/api/scan?payload=${encodeURIComponent(payload)}`,
         );
         const data = await res.json();
         $("sku").value = data.sku || "";
         $("lot").value = data.lot || "";
+      }
+
+      function setMessage(text, className = "") {
+        $("msg").className = className;
+        $("msg").textContent = text;
+      }
+
+      async function scanWithCamera() {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error("Fotocamera non disponibile su questo browser.");
+        }
+
+        if (!window.BarcodeDetector) {
+          throw new Error(
+            "Scansione camera non supportata su questo browser. Incolla il payload e premi 'Leggi QR'.",
+          );
+        }
+
+        const detector = new BarcodeDetector({ formats: ["qr_code"] });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+        });
+
+        return new Promise((resolve, reject) => {
+          const modal = document.createElement("div");
+          modal.className = "scannerModal";
+          modal.innerHTML = `
+            <video class="scannerVideo" autoplay playsinline muted></video>
+            <div class="scannerActions">
+              <button type="button" id="cancelScanBtn">Annulla</button>
+            </div>
+          `;
+
+          const video = modal.querySelector("video");
+          const cancelButton = modal.querySelector("#cancelScanBtn");
+          video.srcObject = stream;
+
+          let active = true;
+
+          const cleanup = () => {
+            active = false;
+            stream.getTracks().forEach((track) => track.stop());
+            modal.remove();
+          };
+
+          cancelButton.addEventListener("click", () => {
+            cleanup();
+            reject(new Error("Scansione annullata"));
+          });
+
+          document.body.appendChild(modal);
+
+          const tick = async () => {
+            if (!active) return;
+
+            try {
+              const codes = await detector.detect(video);
+              if (codes.length) {
+                cleanup();
+                resolve(codes[0].rawValue || "");
+                return;
+              }
+            } catch {
+              // Ignora frame non leggibili; riprova al frame successivo.
+            }
+
+            requestAnimationFrame(tick);
+          };
+
+          video.addEventListener(
+            "loadeddata",
+            () => {
+              requestAnimationFrame(tick);
+            },
+            { once: true },
+          );
+        });
+      }
+
+      $("parseBtn").onclick = async () => {
+        try {
+          let payload = $("payload").value.trim();
+
+          if (!payload) {
+            setMessage("Apro la fotocamera per leggere il QR...", "info");
+            payload = await scanWithCamera();
+            $("payload").value = payload;
+          }
+
+          await parsePayload(payload);
+          setMessage("QR letto correttamente.", "ok");
+        } catch (error) {
+          setMessage(
+            error.message || "Errore durante la lettura del QR.",
+            "err",
+          );
+        }
       };
 
       $("saveBtn").onclick = async () => {
@@ -142,10 +266,12 @@
         });
 
         const data = await res.json();
-        $("msg").className = res.ok ? "ok" : "err";
-        $("msg").textContent = res.ok
-          ? `Movimento salvato. Stock attuale: ${data.stock}`
-          : data.error;
+        setMessage(
+          res.ok
+            ? `Movimento salvato. Stock attuale: ${data.stock}`
+            : data.error,
+          res.ok ? "ok" : "err",
+        );
         if (res.ok) refreshStock();
       };
 
