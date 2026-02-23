@@ -2,80 +2,54 @@
 <html lang="it">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>QR Inventory</title>
     <style>
-      :root {
-        color-scheme: light;
-      }
-
       body {
         font-family: Arial, sans-serif;
-        margin: 16px;
         max-width: 760px;
+        margin: 16px;
         line-height: 1.4;
       }
-
-      h1,
-      h2 {
-        margin-bottom: 8px;
-      }
-
-      p {
-        margin-top: 0;
-      }
-
       input,
       select,
       button,
       textarea {
+        width: 100%;
+        box-sizing: border-box;
         font-size: 16px;
         padding: 10px;
         margin: 4px 0 10px;
-        width: 100%;
-        box-sizing: border-box;
       }
-
-      button {
-        cursor: pointer;
-      }
-
       .row {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 8px;
       }
-
+      .hint {
+        font-size: 13px;
+        color: #555;
+      }
+      .ok {
+        color: #0a7a2f;
+      }
+      .err {
+        color: #b00020;
+      }
+      .info {
+        color: #0a5ea8;
+      }
       table {
-        border-collapse: collapse;
         width: 100%;
+        border-collapse: collapse;
         margin-top: 12px;
       }
-
       th,
       td {
         border: 1px solid #ddd;
         padding: 6px;
         font-size: 14px;
       }
-
-      .ok {
-        color: #0a7a2f;
-      }
-
-      .err {
-        color: #b00020;
-      }
-
-      .info {
-        color: #0a5ea8;
-      }
-
-      .hint {
-        font-size: 13px;
-        color: #555;
-      }
-
       @media (max-width: 640px) {
         .row {
           grid-template-columns: 1fr;
@@ -84,34 +58,23 @@
     </style>
   </head>
   <body>
-    <h1>Movimenti magazzino (test)</h1>
-    <p>
-      Lo stock viene salvato sul server in
-      <code>data/movements.json</code>.
+    <h1>Movimenti magazzino</h1>
+    <p class="hint">
+      iPhone + HTTP: usa <b>Leggi QR da foto</b>, scatta/seleziona foto, poi
+      salva.
     </p>
 
-    <label for="payload">Payload QR (es: <code>sku=ABC;lot=L1</code>)</label>
+    <label for="payload">Payload QR (es: sku=ABC;lot=L1)</label>
     <input id="payload" placeholder="sku=ABC;lot=L1" autocomplete="off" />
-    <button id="parseBtn" type="button">Leggi QR</button>
-    <p class="hint">
-      Su iPhone funziona anche senza HTTPS: premi <strong>"Leggi QR"</strong>,
-      poi scegli <strong>"Scatta foto"</strong> (oppure una foto già presente)
-      quando Safari apre fotocamera/album. Dopo la selezione, il QR viene letto
-      automaticamente.
-    </p>
-    <p class="hint">
-      Se vuoi scansione live con fotocamera (senza passare da file), apri il
-      sito in HTTPS.
-    </p>
+    <button id="scanBtn" type="button">Leggi QR da foto</button>
+    <button id="parseBtn" type="button">Usa payload scritto a mano</button>
 
     <div class="row">
       <div>
-        <label for="sku">SKU</label>
-        <input id="sku" autocomplete="off" />
+        <label for="sku">SKU</label><input id="sku" autocomplete="off" />
       </div>
       <div>
-        <label for="lot">LOT</label>
-        <input id="lot" autocomplete="off" />
+        <label for="lot">LOT</label><input id="lot" autocomplete="off" />
       </div>
     </div>
 
@@ -119,22 +82,19 @@
       <div>
         <label for="type">Tipo</label>
         <select id="type">
-          <option value="IN">IN (entrata)</option>
-          <option value="OUT">OUT (uscita)</option>
+          <option value="IN">IN</option>
+          <option value="OUT">OUT</option>
         </select>
       </div>
       <div>
-        <label for="qty">Quantità</label>
-        <input id="qty" type="number" min="1" value="1" />
+        <label for="qty">Quantità</label
+        ><input id="qty" type="number" min="1" value="1" />
       </div>
     </div>
 
-    <label for="operator">Operatore</label>
-    <input id="operator" placeholder="es. Luca" autocomplete="off" />
-
-    <label for="note">Note</label>
-    <textarea id="note" rows="2"></textarea>
-
+    <label for="operator">Operatore</label
+    ><input id="operator" autocomplete="off" /> <label for="note">Note</label
+    ><textarea id="note" rows="2"></textarea>
     <button id="saveBtn" type="button">Salva movimento</button>
     <p id="msg" aria-live="polite"></p>
 
@@ -158,15 +118,13 @@
       hidden
     />
 
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
     <script>
       const $ = (id) => document.getElementById(id);
-      const msgEl = $("msg");
-
-      function setMessage(text, className = "") {
-        msgEl.className = className;
-        msgEl.textContent = text;
-      }
+      const setMessage = (t, c = "") => {
+        $("msg").className = c;
+        $("msg").textContent = t;
+      };
 
       async function refreshStock() {
         try {
@@ -174,14 +132,13 @@
           const data = await res.json();
           const tbody = $("stockTable").querySelector("tbody");
           tbody.innerHTML = "";
-
-          (data.stock || []).forEach((item) => {
+          (data.stock || []).forEach((r) => {
             const tr = document.createElement("tr");
-            tr.innerHTML = `<td>${item.sku}</td><td>${item.lot || "-"}</td><td>${item.stock}</td>`;
+            tr.innerHTML = `<td>${r.sku}</td><td>${r.lot || "-"}</td><td>${r.stock}</td>`;
             tbody.appendChild(tr);
           });
         } catch {
-          setMessage("Impossibile caricare lo stock dal server.", "err");
+          setMessage("Errore caricamento stock.", "err");
         }
       }
 
@@ -190,158 +147,62 @@
           `/api/scan?payload=${encodeURIComponent(payload)}`,
         );
         const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.error || "Payload non valido.");
-        }
-
+        if (!res.ok) throw new Error(data.error || "Payload non valido.");
         $("sku").value = data.sku || "";
         $("lot").value = data.lot || "";
       }
 
-      function pickImageFromCameraOrGallery() {
+      function pickImage() {
         return new Promise((resolve, reject) => {
-          const input = $("qrImageInput");
-          input.value = "";
-
-          input.onchange = () => {
-            const file = input.files && input.files[0];
-            if (!file) {
-              reject(new Error("Nessuna immagine selezionata."));
-              return;
-            }
-            resolve(file);
-          };
-
-          input.click();
+          const i = $("qrImageInput");
+          i.value = "";
+          i.onchange = () =>
+            i.files && i.files[0]
+              ? resolve(i.files[0])
+              : reject(new Error("Nessuna foto selezionata."));
+          i.click();
         });
       }
 
-      function decodeQrFromImage(file) {
-        return new Promise((resolve, reject) => {
-          if (!window.jsQR) {
-            reject(
-              new Error(
-                "Libreria QR non caricata. Verifica la connessione internet e riprova.",
-              ),
-            );
-            return;
-          }
-
-          const image = new Image();
-          const reader = new FileReader();
-
-          reader.onload = () => {
-            image.src = reader.result;
-          };
-
-          image.onload = () => {
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
-            canvas.width = image.naturalWidth;
-            canvas.height = image.naturalHeight;
-            ctx.drawImage(image, 0, 0);
-
-            const imageData = ctx.getImageData(
-              0,
-              0,
-              canvas.width,
-              canvas.height,
-            );
-            const result = window.jsQR(
-              imageData.data,
-              canvas.width,
-              canvas.height,
-              {
-                inversionAttempts: "attemptBoth",
-              },
-            );
-
-            if (!result || !result.data) {
-              reject(
-                new Error(
-                  "QR non trovato nell'immagine. Prova con una foto più nitida e ravvicinata.",
-                ),
-              );
-              return;
-            }
-
-            resolve(result.data.trim());
-          };
-
-          image.onerror = () => {
-            reject(new Error("Immagine non valida o non leggibile."));
-          };
-
-          reader.onerror = () => {
-            reject(new Error("Errore durante la lettura dell'immagine."));
-          };
-
-          reader.readAsDataURL(file);
-        });
-      }
-
-      async function getPayloadFromQr() {
-        const canUseLiveCamera =
-          window.isSecureContext &&
-          navigator.mediaDevices?.getUserMedia &&
-          window.BarcodeDetector;
-
-        if (canUseLiveCamera) {
-          try {
-            const detector = new BarcodeDetector({ formats: ["qr_code"] });
-            const stream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: { ideal: "environment" } },
-            });
-
-            const video = document.createElement("video");
-            video.playsInline = true;
-            video.autoplay = true;
-            video.srcObject = stream;
-
-            await video.play();
-
-            const started = Date.now();
-            while (Date.now() - started < 12000) {
-              const codes = await detector.detect(video);
-              if (codes && codes.length && codes[0].rawValue) {
-                stream.getTracks().forEach((track) => track.stop());
-                return codes[0].rawValue.trim();
-              }
-              await new Promise((resolve) => setTimeout(resolve, 140));
-            }
-
-            stream.getTracks().forEach((track) => track.stop());
-          } catch {
-            // fallback su immagine
-          }
+      async function decodeFromImage(file) {
+        if (!window.ZXing?.BrowserQRCodeReader)
+          throw new Error("Libreria QR non caricata.");
+        const url = URL.createObjectURL(file);
+        try {
+          const out = await new ZXing.BrowserQRCodeReader().decodeFromImageUrl(
+            url,
+          );
+          if (!out?.text) throw new Error("QR non trovato.");
+          return out.text.trim();
+        } catch {
+          throw new Error(
+            "QR non letto. Riprova con foto più nitida e ravvicinata.",
+          );
+        } finally {
+          URL.revokeObjectURL(url);
         }
-
-        setMessage(
-          "Apro la fotocamera/album: scatta o scegli una foto del QR.",
-          "info",
-        );
-        const file = await pickImageFromCameraOrGallery();
-        return decodeQrFromImage(file);
       }
+
+      $("scanBtn").addEventListener("click", async () => {
+        try {
+          setMessage("Apro fotocamera/album...", "info");
+          const payload = await decodeFromImage(await pickImage());
+          $("payload").value = payload;
+          await parsePayload(payload);
+          setMessage("QR letto correttamente.", "ok");
+        } catch (e) {
+          setMessage(e.message || "Errore lettura QR.", "err");
+        }
+      });
 
       $("parseBtn").addEventListener("click", async () => {
         try {
-          let payload = $("payload").value.trim();
-
-          if (!payload) {
-            payload = await getPayloadFromQr();
-            $("payload").value = payload;
-          }
-
+          const payload = $("payload").value.trim();
+          if (!payload) throw new Error("Inserisci prima il payload.");
           await parsePayload(payload);
-          setMessage("QR letto correttamente.", "ok");
-        } catch (error) {
-          setMessage(
-            error.message || "Errore durante la lettura del QR.",
-            "err",
-          );
+          setMessage("Payload interpretato.", "ok");
+        } catch (e) {
+          setMessage(e.message || "Errore payload.", "err");
         }
       });
 
@@ -355,23 +216,18 @@
             operator: $("operator").value.trim(),
             note: $("note").value.trim(),
           };
-
           const res = await fetch("/api/movement", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
           });
-
           const data = await res.json();
-
-          if (!res.ok) {
+          if (!res.ok)
             throw new Error(data.error || "Salvataggio non riuscito.");
-          }
-
           setMessage(`Movimento salvato. Stock attuale: ${data.stock}`, "ok");
           refreshStock();
-        } catch (error) {
-          setMessage(error.message || "Errore durante il salvataggio.", "err");
+        } catch (e) {
+          setMessage(e.message || "Errore salvataggio.", "err");
         }
       });
 
