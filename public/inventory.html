@@ -60,14 +60,22 @@
   <body>
     <h1>Movimenti magazzino</h1>
     <p class="hint">
-      iPhone + HTTP: usa <b>Leggi QR da foto</b>, scatta/seleziona foto, poi
-      salva.
+      iPhone + HTTP: usa <b>Avvia scanner live</b> e inquadra il QR stampato.
     </p>
 
     <label for="payload">Payload QR (es: sku=ABC;lot=L1)</label>
     <input id="payload" placeholder="sku=ABC;lot=L1" autocomplete="off" />
-    <button id="scanBtn" type="button">Leggi QR da foto</button>
+    <button id="startScanBtn" type="button">Avvia scanner live</button>
+    <button id="stopScanBtn" type="button">Ferma scanner</button>
     <button id="parseBtn" type="button">Usa payload scritto a mano</button>
+    <div id="qrVideoWrap" hidden>
+      <video
+        id="qrVideo"
+        playsinline
+        muted
+        style="width: 100%; border: 1px solid #ddd; border-radius: 8px"
+      ></video>
+    </div>
 
     <div class="row">
       <div>
@@ -110,21 +118,34 @@
       <tbody></tbody>
     </table>
 
-    <input
-      id="qrImageInput"
-      type="file"
-      accept="image/*"
-      capture="environment"
-      hidden
-    />
-
     <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
     <script>
       const $ = (id) => document.getElementById(id);
+      let qrControls = null;
+      let scanLocked = false;
+
       const setMessage = (t, c = "") => {
         $("msg").className = c;
         $("msg").textContent = t;
       };
+      function normalizeScanText(raw) {
+        const text = String(raw || "").trim();
+        if (!text) return text;
+        try {
+          const url = new URL(text);
+          const payload = url.searchParams.get("payload");
+          if (payload) return payload.trim();
+
+          const sku = (url.searchParams.get("sku") || "").trim();
+          const lot = (url.searchParams.get("lot") || "").trim();
+          if (sku || lot) {
+            return `sku=${sku};lot=${lot}`;
+          }
+        } catch {
+          // Non è un URL: uso testo puro.
+        }
+        return text;
+      }
 
       async function refreshStock() {
         try {
@@ -152,47 +173,54 @@
         $("lot").value = data.lot || "";
       }
 
-      function pickImage() {
-        return new Promise((resolve, reject) => {
-          const i = $("qrImageInput");
-          i.value = "";
-          i.onchange = () =>
-            i.files && i.files[0]
-              ? resolve(i.files[0])
-              : reject(new Error("Nessuna foto selezionata."));
-          i.click();
-        });
-      }
-
-      async function decodeFromImage(file) {
-        if (!window.ZXing?.BrowserQRCodeReader)
-          throw new Error("Libreria QR non caricata.");
-        const url = URL.createObjectURL(file);
-        try {
-          const out = await new ZXing.BrowserQRCodeReader().decodeFromImageUrl(
-            url,
-          );
-          if (!out?.text) throw new Error("QR non trovato.");
-          return out.text.trim();
-        } catch {
-          throw new Error(
-            "QR non letto. Riprova con foto più nitida e ravvicinata.",
-          );
-        } finally {
-          URL.revokeObjectURL(url);
+      function stopScanner() {
+        if (qrControls) {
+          qrControls.stop();
+          qrControls = null;
         }
+        $("qrVideoWrap").hidden = true;
+        scanLocked = false;
       }
 
-      $("scanBtn").addEventListener("click", async () => {
+      $("startScanBtn").addEventListener("click", async () => {
         try {
-          setMessage("Apro fotocamera/album...", "info");
-          const payload = await decodeFromImage(await pickImage());
-          $("payload").value = payload;
-          await parsePayload(payload);
-          setMessage("QR letto correttamente.", "ok");
+          if (!window.ZXing?.BrowserQRCodeReader)
+            throw new Error("Libreria QR non caricata.");
+
+          stopScanner();
+          $("qrVideoWrap").hidden = false;
+          setMessage("Attivo la fotocamera...", "info");
+
+          const reader = new ZXing.BrowserQRCodeReader();
+          qrControls = await reader.decodeFromVideoDevice(
+            undefined,
+            $("qrVideo"),
+            async (result) => {
+              if (!result?.text || scanLocked) return;
+              scanLocked = true;
+              stopScanner();
+
+              try {
+                const payload = normalizeScanText(result.text);
+                $("payload").value = payload;
+                await parsePayload(payload);
+                setMessage("QR letto in tempo reale.", "ok");
+              } catch (e) {
+                setMessage(e.message || "Errore lettura QR.", "err");
+              }
+            },
+          );
+
+          setMessage("Inquadra il QR stampato per leggere il codice.", "info");
         } catch (e) {
+          stopScanner();
           setMessage(e.message || "Errore lettura QR.", "err");
         }
+      });
+
+      $("stopScanBtn").addEventListener("click", () => {
+        stopScanner();
+        setMessage("Scanner fermato.", "info");
       });
 
       $("parseBtn").addEventListener("click", async () => {
@@ -231,6 +259,7 @@
         }
       });
 
+      window.addEventListener("beforeunload", stopScanner);
       refreshStock();
     </script>
   </body>
