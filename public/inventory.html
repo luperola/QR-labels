@@ -68,6 +68,13 @@
     <button id="startScanBtn" type="button">Avvia scanner live</button>
     <button id="stopScanBtn" type="button">Ferma scanner</button>
     <button id="parseBtn" type="button">Usa payload scritto a mano</button>
+    <input
+      id="qrImageInput"
+      type="file"
+      accept="image/*"
+      capture="environment"
+      hidden
+    />
     <div id="qrVideoWrap" hidden>
       <video
         id="qrVideo"
@@ -124,6 +131,14 @@
       let qrControls = null;
       let scanLocked = false;
 
+      function canUseLiveScanner() {
+        return (
+          window.isSecureContext &&
+          navigator.mediaDevices &&
+          typeof navigator.mediaDevices.getUserMedia === "function"
+        );
+      }
+
       const setMessage = (t, c = "") => {
         $("msg").className = c;
         $("msg").textContent = t;
@@ -173,6 +188,37 @@
         $("lot").value = data.lot || "";
       }
 
+      async function handleScanText(rawText) {
+        const payload = normalizeScanText(rawText);
+        $("payload").value = payload;
+        await parsePayload(payload);
+        setMessage("QR letto correttamente.", "ok");
+      }
+
+      async function scanFromImageFile(file) {
+        if (!file) return;
+        if (!(window.ZXing && window.ZXing.BrowserMultiFormatReader)) {
+          throw new Error("Libreria QR non caricata.");
+        }
+
+        const imageUrl = URL.createObjectURL(file);
+        const img = new Image();
+        img.src = imageUrl;
+
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = () => reject(new Error("Immagine non valida."));
+        });
+
+        const reader = new ZXing.BrowserMultiFormatReader();
+        try {
+          const result = await reader.decodeFromImageElement(img);
+          await handleScanText(result.text);
+        } finally {
+          URL.revokeObjectURL(imageUrl);
+        }
+      }
+
       function stopScanner() {
         if (qrControls) {
           qrControls.stop();
@@ -186,6 +232,15 @@
         try {
           if (!(window.ZXing && window.ZXing.BrowserQRCodeReader))
             throw new Error("Libreria QR non caricata.");
+
+          if (!canUseLiveScanner()) {
+            setMessage(
+              "Live scanner non disponibile su questa pagina (serve HTTPS). Apro fotocamera in modalità foto.",
+              "info",
+            );
+            $("qrImageInput").click();
+            return;
+          }
 
           stopScanner();
           $("qrVideoWrap").hidden = false;
@@ -201,9 +256,7 @@
               stopScanner();
 
               try {
-                const payload = normalizeScanText(result.text);
-                $("payload").value = payload;
-                await parsePayload(payload);
+                await handleScanText(result.text);
                 setMessage("QR letto in tempo reale.", "ok");
               } catch (e) {
                 setMessage(e.message || "Errore lettura QR.", "err");
@@ -231,6 +284,18 @@
           setMessage("Payload interpretato.", "ok");
         } catch (e) {
           setMessage(e.message || "Errore payload.", "err");
+        }
+      });
+
+      $("qrImageInput").addEventListener("change", async (event) => {
+        const [file] = event.target.files || [];
+        event.target.value = "";
+        if (!file) return;
+
+        try {
+          await scanFromImageFile(file);
+        } catch (e) {
+          setMessage(e.message || "Errore lettura QR da foto.", "err");
         }
       });
 
