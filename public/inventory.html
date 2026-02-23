@@ -158,8 +158,20 @@
       }
 
       async function scanWithCamera() {
+        const isLocalhost =
+          location.hostname === "localhost" ||
+          location.hostname === "127.0.0.1";
+
+        if (!window.isSecureContext && !isLocalhost) {
+          throw new Error(
+            "Fotocamera non disponibile: apri questa pagina in HTTPS (oppure da localhost) e riprova.",
+          );
+        }
+
         if (!navigator.mediaDevices?.getUserMedia) {
-          throw new Error("Fotocamera non disponibile su questo browser.");
+          throw new Error(
+            "Fotocamera non disponibile su questo browser/dispositivo. Inserisci il payload QR manualmente.",
+          );
         }
 
         if (!window.BarcodeDetector) {
